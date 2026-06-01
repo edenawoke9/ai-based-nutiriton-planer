@@ -62,6 +62,10 @@ function SettingsPage() {  const navigate = useNavigate();
   const [initialLoading, setInitialLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Password Change State
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ newPassword: "", confirmPassword: "" });
+
   // Endpoint 1 Form State (/user/{userId}/update)
   const [accountForm, setAccountForm] = useState({
     username: "",
@@ -147,16 +151,44 @@ const [profileForm, setProfileForm] = useState({
     console.log("Sending:", accountForm);
     try {
       if (activeSection === "account") {
+        if (isChangingPassword) {
+          if (!passwordForm.newPassword) {
+            triggerToast("Please enter a new password.");
+            setLoading(false);
+            return;
+          }
+          if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+            triggerToast("Passwords do not match.");
+            setLoading(false);
+            return;
+          }
+          if (passwordForm.newPassword.length < 6) {
+            triggerToast("Password must be at least 6 characters long.");
+            setLoading(false);
+            return;
+          }
+        }
+
+        const payload: any = {
+          username: accountForm.username,
+          email: accountForm.email,
+        };
+        if (isChangingPassword && passwordForm.newPassword) {
+          payload.password = passwordForm.newPassword;
+        }
+
         // Account Details Update Path
         const res = await fetch(`${API_BASE_URL}/${userId}/update`, {
           method: "PUT", 
           headers: getHeaders(),
-      body: JSON.stringify({
-  username: accountForm.username,
-  email: accountForm.email,
-}),
+          body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error("Account details update failed.");
+
+        if (isChangingPassword) {
+          setIsChangingPassword(false);
+          setPasswordForm({ newPassword: "", confirmPassword: "" });
+        }
       } else {
         // Biometrics and Goals Update Path
         const res = await fetch(`${API_BASE_URL}/${userId}`, {
@@ -257,13 +289,57 @@ const [profileForm, setProfileForm] = useState({
                     value={accountForm.email} 
                     onChange={(val) => setAccountForm(p => ({ ...p, email: val }))} 
                   />
-                <Field
-  label="Password"
-  type="password"
-  value="••••••••"
-  onChange={() => {}}
-  disabled={true}
-/>
+
+                  {!isChangingPassword ? (
+                    <div className="block w-full">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Password</span>
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <input
+                          type="password"
+                          value="••••••••"
+                          disabled
+                          className="h-11 flex-1 rounded-xl border border-border bg-muted/40 px-3 text-sm font-medium opacity-60 cursor-not-allowed"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setIsChangingPassword(true)}
+                          className="h-11 px-4 rounded-xl border border-border bg-background text-xs font-semibold hover:bg-muted transition-colors"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="col-span-1 sm:col-span-2 grid gap-4 sm:grid-cols-2 rounded-xl border border-border p-4 bg-muted/20">
+                      <Field
+                        label="New Password"
+                        type="password"
+                        placeholder="Enter new password"
+                        value={passwordForm.newPassword}
+                        onChange={(val) => setPasswordForm(p => ({ ...p, newPassword: val }))}
+                      />
+                      <Field
+                        label="Confirm Password"
+                        type="password"
+                        placeholder="Confirm new password"
+                        value={passwordForm.confirmPassword}
+                        onChange={(val) => setPasswordForm(p => ({ ...p, confirmPassword: val }))}
+                      />
+                      <div className="col-span-1 sm:col-span-2 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsChangingPassword(false);
+                            setPasswordForm({ newPassword: "", confirmPassword: "" });
+                          }}
+                          className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          Cancel Password Change
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="block">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Account Role</span>
                    <select

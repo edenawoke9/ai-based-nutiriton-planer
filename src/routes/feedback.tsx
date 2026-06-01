@@ -12,17 +12,19 @@ function useAuth() {
   const userProfileStr = localStorage.getItem(USER_PROFILE_KEY);
   
   let userId: string | null = null;
+  let userEmail: string | null = null;
   if (userProfileStr) {
     try {
       const user = JSON.parse(userProfileStr);
       userId = user.userId || user.id || null;
+      userEmail = user.email || null;
     } catch (e) {
       console.error("Failed to parse user_profile payload", e);
     }
   }
 
   const isAuthenticated = !!token && !!userId;
-  return { token, isAuthenticated };
+  return { token, isAuthenticated, userEmail };
 }
 
 export const Route = createFileRoute("/feedback")({
@@ -36,11 +38,10 @@ export const Route = createFileRoute("/feedback")({
 });
 
 function FeedbackPage() {
-  const { token, isAuthenticated } = useAuth();
+  const { token, isAuthenticated, userEmail } = useAuth();
   
   // --- FORM STATE ---
-  const [rating, setRating] = useState<number>(5);
-  const [hoveredRating, setHoveredRating] = useState<number | null>(null);
+  const [selectedStars, setSelectedStars] = useState<boolean[]>([true, true, true, true, true]);
   const [comment, setComment] = useState<string>("");
   
   // --- ASYNC STATES ---
@@ -61,17 +62,19 @@ function FeedbackPage() {
     setSuccessMessage(null);
 
     try {
+      const currentRating = selectedStars.filter(Boolean).length;
       await apiFetch("/feedback", {
         method: "POST",
         body: JSON.stringify({
-          rating: Number(rating),
+          rating: currentRating,
           comment: comment.trim(),
+          email: userEmail || "hanabduman@gmail.com",
         }),
       });
 
       setSuccessMessage("Thank you! Your feedback has been received and logged.");
       setComment("");
-      setRating(5);
+      setSelectedStars([true, true, true, true, true]);
     } catch (err: any) {
       setErrorMessage(err.message || "A network routing error occurred while processing submission flags.");
     } finally {
@@ -130,16 +133,20 @@ function FeedbackPage() {
                 Experience Rating
               </span>
               <div className="flex items-center gap-1.5">
-                {[1, 2, 3, 4, 5].map((starValue) => {
-                  const isFilled = hoveredRating !== null ? starValue <= hoveredRating : starValue <= rating;
+                {[1, 2, 3, 4, 5].map((starValue, index) => {
+                  const isFilled = selectedStars[index];
                   return (
                     <button
                       key={starValue}
                       type="button"
                       disabled={isLoading}
-                      onClick={() => setRating(starValue)}
-                      onMouseEnter={() => setHoveredRating(starValue)}
-                      onMouseLeave={() => setHoveredRating(null)}
+                      onClick={() => {
+                        setSelectedStars((prev) => {
+                          const next = [...prev];
+                          next[index] = !next[index];
+                          return next;
+                        });
+                      }}
                       className="p-1 rounded-md text-muted-foreground/30 hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-ring/20"
                     >
                       <Star
@@ -151,7 +158,7 @@ function FeedbackPage() {
                   );
                 })}
                 <span className="text-xs font-bold text-muted-foreground ml-3">
-                  ({rating} out of 5)
+                  ({selectedStars.filter(Boolean).length} out of 5)
                 </span>
               </div>
             </div>
