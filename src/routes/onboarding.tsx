@@ -36,10 +36,14 @@ function OnboardingPage() {
     activity: "moderate", // sedentary | moderate | active
     weight: "",
     height: "",
-    age: "22", // Default age fallback based on user profile configurations
-    gender: "female", // Context-aligned standard profile initialization
+    age: "",
+    gender: "female",
     restrictions: [] as string[],
   });
+
+  // --- STEP 2 VALIDATION ERRORS ---
+  type Step2Errors = { weight?: string; height?: string; age?: string };
+  const [step2Errors, setStep2Errors] = useState<Step2Errors>({});
 
   // Pull local session context parameters safely on mount
   useEffect(() => {
@@ -72,8 +76,44 @@ function OnboardingPage() {
     }
   }, [navigate]);
 
-  const nextStep = () => setStep((s) => (s + 1) as Step);
-  const prevStep = () => setStep((s) => (s - 1) as Step);
+  // Validate Step 2 before advancing
+  const validateStep2 = (): boolean => {
+    const errors: Step2Errors = {};
+    const w = parseFloat(profile.weight);
+    const h = parseFloat(profile.height);
+    const a = parseInt(profile.age, 10);
+
+    if (!profile.weight.trim()) {
+      errors.weight = "Weight is required.";
+    } else if (isNaN(w) || w < 10 || w > 500) {
+      errors.weight = "Enter a valid weight between 10 – 500 kg.";
+    }
+
+    if (!profile.height.trim()) {
+      errors.height = "Height is required.";
+    } else if (isNaN(h) || h < 50 || h > 300) {
+      errors.height = "Enter a valid height between 50 – 300 cm.";
+    }
+
+    if (!profile.age.trim()) {
+      errors.age = "Age is required.";
+    } else if (isNaN(a) || a < 1 || a > 120 || !Number.isInteger(parseFloat(profile.age))) {
+      errors.age = "Enter a whole number age between 1 – 120 years.";
+    }
+
+    setStep2Errors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const nextStep = () => {
+    if (step === 2 && !validateStep2()) return;
+    setStep2Errors({});
+    setStep((s) => (s + 1) as Step);
+  };
+  const prevStep = () => {
+    setStep2Errors({});
+    setStep((s) => (s - 1) as Step);
+  };
 
   const toggleRestriction = (id: string) => {
     setProfile((prev) => ({
@@ -238,49 +278,117 @@ function OnboardingPage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-lavender/20 text-primary">
                 <Scale className="h-5 w-5 text-lavender" />
               </div>
-              <h2 className="mt-4 font-display text-2xl font-semibold sm:text-3xl">Metrics & Physical Activity</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Used to accurately deduce your TDEE and daily water matrix.</p>
+              <h2 className="mt-4 font-display text-2xl font-semibold sm:text-3xl">Metrics &amp; Physical Activity</h2>
+              <p className="mt-1 text-sm text-muted-foreground">All fields are required — used to accurately calculate your TDEE and daily water targets.</p>
 
+              {/* Weight & Height */}
               <div className="mt-6 grid grid-cols-2 gap-4">
+                {/* Weight */}
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Weight (kg)</label>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                    Weight (kg) <span className="text-destructive">*</span>
+                  </label>
                   <input
                     type="number"
-                    placeholder="50"
+                    placeholder="e.g. 65"
+                    min={10}
+                    max={500}
+                    step={0.1}
                     value={profile.weight}
-                    onChange={(e) => setProfile({ ...profile, weight: e.target.value })}
-                    className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm focus:border-leaf focus:outline-none"
+                    onKeyDown={(e) => {
+                      // Block e, E, +, - but allow decimal point
+                      if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
+                    }}
+                    onChange={(e) => {
+                      setProfile({ ...profile, weight: e.target.value });
+                      if (step2Errors.weight) setStep2Errors((prev) => ({ ...prev, weight: undefined }));
+                    }}
+                    className={`w-full rounded-xl border bg-background px-4 py-3 text-sm focus:outline-none transition-colors ${
+                      step2Errors.weight
+                        ? "border-destructive focus:border-destructive"
+                        : "border-border focus:border-leaf"
+                    }`}
                   />
+                  {step2Errors.weight && (
+                    <p className="mt-1.5 text-xs text-destructive font-medium">{step2Errors.weight}</p>
+                  )}
                 </div>
+
+                {/* Height */}
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Height (cm)</label>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                    Height (cm) <span className="text-destructive">*</span>
+                  </label>
                   <input
                     type="number"
-                    placeholder="155"
+                    placeholder="e.g. 165"
+                    min={50}
+                    max={300}
+                    step={0.1}
                     value={profile.height}
-                    onChange={(e) => setProfile({ ...profile, height: e.target.value })}
-                    className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm focus:border-leaf focus:outline-none"
+                    onKeyDown={(e) => {
+                      if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
+                    }}
+                    onChange={(e) => {
+                      setProfile({ ...profile, height: e.target.value });
+                      if (step2Errors.height) setStep2Errors((prev) => ({ ...prev, height: undefined }));
+                    }}
+                    className={`w-full rounded-xl border bg-background px-4 py-3 text-sm focus:outline-none transition-colors ${
+                      step2Errors.height
+                        ? "border-destructive focus:border-destructive"
+                        : "border-border focus:border-leaf"
+                    }`}
                   />
+                  {step2Errors.height && (
+                    <p className="mt-1.5 text-xs text-destructive font-medium">{step2Errors.height}</p>
+                  )}
                 </div>
               </div>
 
-              <div className="mt-6 grid grid-cols-2 gap-4">
+              {/* Age & Gender */}
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                {/* Age */}
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Age (years)</label>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                    Age (years) <span className="text-destructive">*</span>
+                  </label>
                   <input
                     type="number"
-                    placeholder="22"
+                    placeholder="e.g. 25"
+                    min={1}
+                    max={120}
+                    step={1}
                     value={profile.age}
-                    onChange={(e) => setProfile({ ...profile, age: e.target.value })}
-                    className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm focus:border-leaf focus:outline-none"
+                    onKeyDown={(e) => {
+                      // Block decimal point, e, E, +, - for age (integers only)
+                      if (["e", "E", "+", "-", "."].includes(e.key)) e.preventDefault();
+                    }}
+                    onChange={(e) => {
+                      // Strip any decimals that might sneak through paste
+                      const val = e.target.value.replace(/[^0-9]/g, "");
+                      setProfile({ ...profile, age: val });
+                      if (step2Errors.age) setStep2Errors((prev) => ({ ...prev, age: undefined }));
+                    }}
+                    className={`w-full rounded-xl border bg-background px-4 py-3 text-sm focus:outline-none transition-colors ${
+                      step2Errors.age
+                        ? "border-destructive focus:border-destructive"
+                        : "border-border focus:border-leaf"
+                    }`}
                   />
+                  {step2Errors.age && (
+                    <p className="mt-1.5 text-xs text-destructive font-medium">{step2Errors.age}</p>
+                  )}
                 </div>
+
+                {/* Gender */}
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Gender</label>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                    Gender <span className="text-destructive">*</span>
+                  </label>
                   <select
                     value={profile.gender}
                     onChange={(e) => setProfile({ ...profile, gender: e.target.value })}
-                    className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm focus:border-leaf focus:outline-none h-[46px]"
+                    className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm focus:border-leaf focus:outline-none h-[46px] transition-colors"
                   >
                     <option value="female">Female</option>
                     <option value="male">Male</option>
@@ -288,21 +396,24 @@ function OnboardingPage() {
                 </div>
               </div>
 
+              {/* Activity Level */}
               <div className="mt-6">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Weekly Activity Level</label>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  Weekly Activity Level <span className="text-destructive">*</span>
+                </label>
                 <div className="space-y-3">
                   {[
-                    { id: "sedentary", label: "Sedentary", desc: "Desk job, minor structural workout routines." },
-                    { id: "moderate", label: "Active Trainer", desc: "3-5 specialized training loads / runs a week." },
-                    { id: "active", label: "Elite Output", desc: "Daily heavy exertion or athletic performance tracks." }
+                    { id: "sedentary", label: "Sedentary", desc: "Desk job, little to no exercise." },
+                    { id: "moderate", label: "Active Trainer", desc: "3–5 workouts or runs per week." },
+                    { id: "active", label: "Elite Output", desc: "Daily heavy training or athletic performance." }
                   ].map((act) => (
                     <button
                       key={act.id}
                       type="button"
                       onClick={() => setProfile({ ...profile, activity: act.id })}
                       className={`w-full text-left p-4 rounded-2xl border transition-all flex items-center justify-between ${
-                        profile.activity === act.id 
-                          ? "border-leaf bg-leaf-soft/40 ring-1 ring-leaf" 
+                        profile.activity === act.id
+                          ? "border-leaf bg-leaf-soft/40 ring-1 ring-leaf"
                           : "border-border bg-background hover:bg-muted/30"
                       }`}
                     >
@@ -310,7 +421,11 @@ function OnboardingPage() {
                         <div className="font-semibold text-sm">{act.label}</div>
                         <div className="text-xs text-muted-foreground mt-0.5">{act.desc}</div>
                       </div>
-                      {profile.activity === act.id && <div className="h-5 w-5 rounded-full bg-leaf flex items-center justify-center text-primary"><Check className="h-3 w-3" /></div>}
+                      {profile.activity === act.id && (
+                        <div className="h-5 w-5 rounded-full bg-leaf flex items-center justify-center text-primary">
+                          <Check className="h-3 w-3" />
+                        </div>
+                      )}
                     </button>
                   ))}
                 </div>

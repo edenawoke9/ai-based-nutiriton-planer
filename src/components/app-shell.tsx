@@ -44,21 +44,71 @@ interface AppShellProps {
   children: React.ReactNode;
 }
 
+interface UserInfo {
+  healthGoal?: string;      // "lose_weight" | "gain_weight" | "maintain"
+  activityLevel?: number;   // 0 = sedentary | 1 = moderate | 2 = active
+}
+
 interface UserProfile {
   name?: string;
   username?: string;
   user_name?: string;
   dayOfPlan?: number;
+  userInfo?: UserInfo;
 }
 
-const insights = [
-  "You hit your protein goal 5 of 7 days. Try one extra serving on rest days.",
-  "Stay hydrated today. Water supports energy and digestion.",
-  "A balanced breakfast can help you stay full longer.",
-  "Small healthy choices every day lead to big results.",
-  "Try adding one extra serving of vegetables today.",
-  "Consistency matters more than perfection.",
-];
+// --- DYNAMIC INSIGHTS BASED ON USER GOAL + ACTIVITY LEVEL ---
+const goalInsights: Record<string, string[]> = {
+  lose_weight: [
+    "Protein keeps you full — aim for at least 1.2g per kg of body weight.",
+    "A 300–500 kcal daily deficit is the sweet spot for steady fat loss.",
+    "Drinking water before meals can reduce intake by up to 13%.",
+    "Whole foods over processed ones: better satiety, fewer hidden calories.",
+    "Combine cardio with strength training to preserve muscle while losing fat.",
+    "Sleep deprivation raises hunger hormones — protect your 7–9 hours.",
+  ],
+  gain_weight: [
+    "Aim for a 250–500 kcal surplus daily for lean, steady muscle growth.",
+    "Eat protein within 2 hours post-workout when muscle synthesis peaks.",
+    "Compound lifts (squat, deadlift, bench) drive the most hypertrophy.",
+    "Carbs replenish glycogen — don't fear them on training days.",
+    "Sleep is when muscles rebuild — it's as important as your training.",
+    "Progressive overload weekly, even by small increments, drives gains.",
+  ],
+  maintain: [
+    "Consistency in meal timing helps regulate your metabolism.",
+    "A balanced plate: 50% veg, 25% protein, 25% complex carbs.",
+    "Track macros weekly rather than daily for a stress-free perspective.",
+    "Nutrient density matters — vitamins and minerals fuel everything.",
+    "Mild dehydration reduces performance by 5–10% — stay topped up.",
+    "Mindful eating: slow down and let satiety signals catch up.",
+  ],
+};
+
+const activityBonus: Record<number, string> = {
+  0: "Even a 20-min walk after meals improves insulin sensitivity.",
+  1: "Rest days are when muscle is built — honour them fully.",
+  2: "Elite output demands 1.6–2.2g protein/kg bodyweight. Check yours.",
+};
+
+const GOAL_LABELS: Record<string, string> = {
+  lose_weight: "Fat Loss",
+  gain_weight: "Muscle Gain",
+  maintain: "Maintenance",
+};
+
+function getWeeklyInsight(goal: string, activityLevel: number): string {
+  // Use ISO week number so the tip changes every Monday, deterministically
+  const now = new Date();
+  const weekIndex = Math.floor(
+    (now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) /
+      (7 * 24 * 60 * 60 * 1000)
+  );
+  const tips = [...(goalInsights[goal] ?? goalInsights.maintain)];
+  const bonus = activityBonus[activityLevel];
+  if (bonus) tips.push(bonus);
+  return tips[weekIndex % tips.length];
+}
 export function AppShell({ children }: AppShellProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
@@ -69,26 +119,29 @@ export function AppShell({ children }: AppShellProps) {
   };
   
   // 1. Manage user state directly inside the shell to ensure persistent hydration
- const [userData, setUserData] = useState<UserProfile | null>(null);
-const [weeklyInsight, setWeeklyInsight] = useState("");
+  const [userData, setUserData] = useState<UserProfile | null>(null);
+  const [weeklyInsight, setWeeklyInsight] = useState("");
+  const [insightGoalLabel, setInsightGoalLabel] = useState("This week");
 
-useEffect(() => {
-  try {
-    const storedProfile = localStorage.getItem(USER_PROFILE_KEY);
+  useEffect(() => {
+    try {
+      const storedProfile = localStorage.getItem(USER_PROFILE_KEY);
+      if (storedProfile) {
+        const parsed: UserProfile = JSON.parse(storedProfile);
+        setUserData(parsed);
 
-    if (storedProfile) {
-      const parsed = JSON.parse(storedProfile);
-      setUserData(parsed);
+        const goal = parsed?.userInfo?.healthGoal ?? "maintain";
+        const activity = parsed?.userInfo?.activityLevel ?? 1;
+        setWeeklyInsight(getWeeklyInsight(goal, activity));
+        setInsightGoalLabel(GOAL_LABELS[goal] ?? "This week");
+      } else {
+        setWeeklyInsight(getWeeklyInsight("maintain", 1));
+      }
+    } catch (error) {
+      console.error("Failed to parse user profile from storage:", error);
+      setWeeklyInsight(getWeeklyInsight("maintain", 1));
     }
-
-    const randomInsight =
-      insights[Math.floor(Math.random() * insights.length)];
-
-    setWeeklyInsight(randomInsight);
-  } catch (error) {
-    console.error("Failed to parse user profile from storage:", error);
-  }
-}, []);
+  }, []);
   // 2. Fallback normalization strategy to capture backend key discrepancies gracefully
   const rawDisplayName = 
     userData?.name || 
@@ -170,15 +223,22 @@ useEffect(() => {
         </nav>
 
         <div className="mt-auto space-y-2">
-          <div className="rounded-2xl bg-sidebar-accent/60 p-4">
-            <div className="flex items-center gap-2 text-sidebar-foreground">
-              <Sparkles className="h-4 w-4 text-leaf" />
-              <span className="text-sm font-semibold">Weekly insight</span>
+          {weeklyInsight && (
+            <div className="rounded-2xl border border-leaf/20 bg-sidebar-accent/60 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sidebar-foreground">
+                  <Sparkles className="h-4 w-4 text-leaf shrink-0" />
+                  <span className="text-sm font-semibold">Weekly tip</span>
+                </div>
+                <span className="rounded-full bg-leaf/20 px-2 py-0.5 text-[10px] font-semibold text-leaf shrink-0">
+                  {insightGoalLabel}
+                </span>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-sidebar-foreground/70">
+                {weeklyInsight}
+              </p>
             </div>
-          <p className="mt-2 text-xs leading-relaxed text-sidebar-foreground/70">
-  {weeklyInsight}
-</p>
-          </div>
+          )}
           
           <Link
             to="/settings"
