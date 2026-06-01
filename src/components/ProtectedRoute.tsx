@@ -5,9 +5,9 @@ import { getAuthToken } from "@/lib/api";
 
 // Routes that do NOT require authentication
 const PUBLIC_ROUTES = [
-  "/",
   "/login",
   "/signup",
+  "/onboarding",
   "/forgot-password",
   "/reset-password",
   "/verify-email",
@@ -16,9 +16,11 @@ const PUBLIC_ROUTES = [
   "/terms",
 ];
 
-// Routes that logged-in users should NOT be able to visit
-// (e.g. they're already logged in, no need to see login/signup again)
+// Routes that redirect authenticated users away (no need to see login/signup again)
 const AUTH_ONLY_ROUTES = ["/login", "/signup"];
+
+// The root "/" is a smart gate — always redirects based on auth state
+const ROOT_ROUTE = "/";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
@@ -28,9 +30,20 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const currentPath = routerState.location.pathname;
   const isPublic = PUBLIC_ROUTES.includes(currentPath);
   const isAuthOnly = AUTH_ONLY_ROUTES.includes(currentPath);
+  const isRoot = currentPath === ROOT_ROUTE;
 
   useEffect(() => {
     const token = getAuthToken();
+
+    // "/" is a smart redirect gate — never render the landing page directly
+    if (isRoot) {
+      if (token) {
+        navigate({ to: "/dashboard", replace: true });
+      } else {
+        navigate({ to: "/onboarding", replace: true });
+      }
+      return;
+    }
 
     if (token && isAuthOnly) {
       // Logged-in user trying to visit /login or /signup → send to dashboard
@@ -48,12 +61,11 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // All other cases (public route, or authenticated user on a protected route)
     setReady(true);
-  }, [currentPath, isPublic, isAuthOnly, navigate]);
+  }, [currentPath, isPublic, isAuthOnly, isRoot, navigate]);
 
-  // Show a spinner only on protected routes while we verify the token
-  if (!ready && !isPublic) {
+  // Show a spinner while the auth check & redirect is in flight
+  if (!ready) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-leaf" />
